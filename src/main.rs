@@ -9,16 +9,16 @@ use std::time::Instant;
 
 pub type Res<T> = Result<T, Box<dyn Error>>;
 
-fn random_string(s: &mut String, len: usize, rng: &mut DistIter<Standard, StdRng, char>) {
-    fn pred(&c: &char) -> bool {
-        c != '\r' && c != '\t' && c != '\n' && c != ' '
+fn random_string(s: &mut Vec<u8>, len: usize, rng: &mut DistIter<Standard, StdRng, u8>) {
+    fn pred(&c: &u8) -> bool {
+        c != b'\r' && c != b'\t' && c != b'\n' && c != b' '
     }
 
     s.clear();
     s.extend(rng.by_ref().filter(pred).take(len));
 }
 
-fn hash(mut hasher: Sha1, suffix: &str, hash: &mut [u8]) -> Res<()> {
+fn hash(mut hasher: Sha1, suffix: &[u8], hash: &mut [u8]) -> Res<()> {
     hasher.update(suffix);
     let hashed = &hasher.finalize()[..];
     hex::encode_to_slice(hashed, hash)?;
@@ -42,13 +42,13 @@ fn matches_difficulty(hash: &[u8], difficulty: u8) -> bool {
 }
 
 fn main() -> Res<()> {
-    const LEN: usize = 32;
+    let len: usize = 32;
     const HEX_HASH_LEN: usize = 40;
     let diff = 7;
 
-    let mut rng: DistIter<Standard, StdRng, char> = StdRng::from_entropy().sample_iter(Standard);
+    let mut rng: DistIter<Standard, StdRng, u8> = StdRng::from_entropy().sample_iter(Standard);
     let authdata = "kHtMDdVrTKHhUaNusVyBaJybfNMWjfxnaIiAYqgfmCTkNKFvYGloeHDHdsksfFla";
-    let mut suffix = String::with_capacity(LEN);
+    let mut suffix = Vec::with_capacity(len);
     let mut hex_hash = [0u8; HEX_HASH_LEN];
 
     let mut base_hasher = Sha1::default();
@@ -61,7 +61,7 @@ fn main() -> Res<()> {
         iters += 1;
 
         let hasher = base_hasher.clone();
-        random_string(&mut suffix, LEN, &mut rng);
+        random_string(&mut suffix, len, &mut rng);
         hash(hasher, &suffix, &mut hex_hash)?;
 
         if matches_difficulty(&hex_hash, diff) {
