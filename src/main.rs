@@ -15,7 +15,7 @@ fn random_string(s: &mut Vec<u8>, len: usize, rng: &mut DistIter<Standard, Threa
     }
 
     s.clear();
-    s.extend(rng.by_ref().filter(pred).take(len));
+    s.extend(rng.filter(pred).take(len));
 }
 
 fn hash(mut hasher: Sha1, suffix: &[u8], hash: &mut [u8]) -> Res<()> {
