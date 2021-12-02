@@ -1,15 +1,15 @@
 #![warn(clippy::all)]
 
 use rand::distributions::{DistIter, Standard};
-use rand::prelude::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::prelude::ThreadRng;
+use rand::{thread_rng, Rng};
 use sha1::{Digest, Sha1};
 use std::error::Error;
 use std::time::Instant;
 
 pub type Res<T> = Result<T, Box<dyn Error>>;
 
-fn random_string(s: &mut Vec<u8>, len: usize, rng: &mut DistIter<Standard, StdRng, u8>) {
+fn random_string(s: &mut Vec<u8>, len: usize, rng: &mut DistIter<Standard, ThreadRng, u8>) {
     fn pred(&c: &u8) -> bool {
         c != b'\r' && c != b'\t' && c != b'\n' && c != b' '
     }
@@ -46,7 +46,7 @@ fn main() -> Res<()> {
     const HEX_HASH_LEN: usize = 40;
     let diff = 7;
 
-    let mut rng: DistIter<Standard, StdRng, u8> = StdRng::from_entropy().sample_iter(Standard);
+    let mut rng: DistIter<Standard, ThreadRng, u8> = thread_rng().sample_iter(Standard);
     let authdata = "kHtMDdVrTKHhUaNusVyBaJybfNMWjfxnaIiAYqgfmCTkNKFvYGloeHDHdsksfFla";
     let mut suffix = Vec::with_capacity(len);
     let mut hex_hash = [0u8; HEX_HASH_LEN];
