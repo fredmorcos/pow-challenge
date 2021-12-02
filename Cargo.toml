@@ -1,0 +1,21 @@
+[package]
+name = "gen_rand_str"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+hex = "0.4"
+humantime = "2.1"
+rand = "0.8"
+sha-1 = "0.9"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+incremental = false
+debug = true
+overflow-checks = false
+panic = "abort"
