@@ -28,26 +28,67 @@ fn hash(mut hasher: Sha1, suffix: &[u8], hash: &mut [u8; HEX_HASH_LEN]) -> Res<(
     Ok(())
 }
 
-fn matches_difficulty(hash: &[u8], difficulty: u8) -> bool {
-    static DIFFICULTY_TABLE: [&[u8]; 9] = [
-        b"0",
-        b"00",
-        b"000",
-        b"0000",
-        b"00000",
-        b"000000",
-        b"0000000",
-        b"00000000",
-        b"000000000",
-    ];
-
-    hash.starts_with(DIFFICULTY_TABLE[usize::from(difficulty - 1)])
+#[rustfmt::skip]
+fn matches_difficulty<const N: usize>(hash: &[u8]) -> bool {
+    if N == 0 {
+        true
+    } else if N == 1 {
+        *unsafe { hash.get_unchecked(0) } < 16
+    } else if N == 2 {
+        *unsafe { hash.get_unchecked(0) } == 0
+    } else if N == 3 {
+        *unsafe { hash.get_unchecked(0) } == 0 &&
+        *unsafe { hash.get_unchecked(1) } < 16
+    } else if N == 4 {
+        *unsafe { hash.get_unchecked(0) } == 0 &&
+        *unsafe { hash.get_unchecked(1) } == 0
+    } else if N == 5 {
+        *unsafe { hash.get_unchecked(0) } == 0 &&
+        *unsafe { hash.get_unchecked(1) } == 0 &&
+        *unsafe { hash.get_unchecked(2) } < 16
+    } else if N == 6 {
+        *unsafe { hash.get_unchecked(0) } == 0 &&
+        *unsafe { hash.get_unchecked(1) } == 0 &&
+        *unsafe { hash.get_unchecked(2) } == 0
+    } else if N == 7 {
+        *unsafe { hash.get_unchecked(0) } == 0 &&
+        *unsafe { hash.get_unchecked(1) } == 0 &&
+        *unsafe { hash.get_unchecked(2) } == 0 &&
+        *unsafe { hash.get_unchecked(3) } < 16
+    } else if N == 8 {
+        *unsafe { hash.get_unchecked(0) } == 0 &&
+        *unsafe { hash.get_unchecked(1) } == 0 &&
+        *unsafe { hash.get_unchecked(2) } == 0 &&
+        *unsafe { hash.get_unchecked(3) } == 0
+    } else if N == 9 {
+        *unsafe{ hash.get_unchecked(0) } == 0 &&
+        *unsafe{ hash.get_unchecked(1) } == 0 &&
+        *unsafe{ hash.get_unchecked(2) } == 0 &&
+        *unsafe{ hash.get_unchecked(3) } == 0 &&
+        *unsafe{ hash.get_unchecked(4) } < 16
+    } else {
+        panic!("Unsupported difficulty level");
+    }
 }
 
 fn main() -> Res<()> {
     let len: usize = 8;
     const ITERS: usize = 100_000_000;
+
     let diff = 7;
+    let diff_func_table = &[
+        matches_difficulty::<0>,
+        matches_difficulty::<1>,
+        matches_difficulty::<2>,
+        matches_difficulty::<3>,
+        matches_difficulty::<4>,
+        matches_difficulty::<5>,
+        matches_difficulty::<6>,
+        matches_difficulty::<7>,
+        matches_difficulty::<8>,
+        matches_difficulty::<9>,
+    ];
+    let matches_difficulty_func = diff_func_table[diff];
 
     let authdata = "kHtMDdVrTKHhUaNusVyBaJybfNMWjfxnaIiAYqgfmCTkNKFvYGloeHDHdsksfFla";
     let mut base_hasher = Sha1::default();
@@ -57,7 +98,7 @@ fn main() -> Res<()> {
     let nthreads = rayon::current_num_threads();
 
     let stop = Arc::new(AtomicBool::new(false));
-    let result_suffix = Arc::new(parking_lot::const_mutex(Vec::new()));
+    let result_suffix = Arc::new(parking_lot::const_mutex(None));
 
     let start = Instant::now();
     rayon::scope(|scope| {
@@ -75,8 +116,13 @@ fn main() -> Res<()> {
                 let mut iters = 0;
                 for i in 0..ITERS {
                     random_string(&mut suffix, len, &mut rng);
-                    hash(base_hasher.clone(), &suffix, &mut hex_hash).unwrap();
-                    if matches_difficulty(&hex_hash, diff) {
+                    // hash(base_hasher.clone(), &suffix, &mut hex_hash).unwrap();
+
+                    let mut hasher = base_hasher.clone();
+                    hasher.update(&suffix);
+                    let hashed = &hasher.finalize()[..];
+
+                    if matches_difficulty_func(hashed) {
                         stop.store(true, std::sync::atomic::Ordering::Release);
 
                         let mut result_suffix =
@@ -89,19 +135,28 @@ fn main() -> Res<()> {
                                 break;
                             };
 
-                        *result_suffix = suffix;
+                        *result_suffix = Some(suffix);
 
-                        if let Ok(hex_hash) = std::str::from_utf8(&hex_hash) {
+                        println!(
+                            "Thread {}: Found string ({}) {:?}",
+                            thread_i,
+                            hashed.len(),
+                            hashed
+                        );
+
+                        if let Err(e) = hex::encode_to_slice(hashed, &mut hex_hash) {
+                            println!("Thread {}: Failed to encode hash to hex: {}", thread_i, e);
+                        } else if let Ok(hex_hash) = std::str::from_utf8(&hex_hash) {
                             println!(
                                 "Thread {}: Found string with \
-                                 authentication hash `{}` \
-                                 that matches difficulty {}",
+                                      authentication hash `{}` \
+                                      that matches difficulty {}",
                                 thread_i, hex_hash, diff
                             );
                         } else {
                             println!(
                                 "Thread {}: Found string that \
-                                 matches difficulty {}",
+                                      matches difficulty {}",
                                 thread_i, diff
                             );
                         }
@@ -127,11 +182,14 @@ fn main() -> Res<()> {
     });
     let duration = Instant::now().duration_since(start);
 
-    let result_suffix = result_suffix.lock();
-    let mut hex_hash = [0u8; HEX_HASH_LEN];
-    hash(base_hasher, &result_suffix, &mut hex_hash).unwrap();
-    if let Ok(hex_hash) = std::str::from_utf8(&hex_hash) {
-        println!("Result = {}", hex_hash);
+    if let Some(result_suffix) = &*result_suffix.lock() {
+        let mut hex_hash = [0u8; HEX_HASH_LEN];
+        hash(base_hasher, result_suffix, &mut hex_hash).unwrap();
+        if let Ok(hex_hash) = std::str::from_utf8(&hex_hash) {
+            println!("Result = {}", hex_hash);
+        }
+    } else {
+        println!("NO RESULT FOUND");
     }
     let total_iters = total_iters.load(std::sync::atomic::Ordering::SeqCst);
     let iters_per_micro = f64::from(total_iters as u32) / f64::from(duration.as_micros() as u32);
