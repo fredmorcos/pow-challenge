@@ -1,6 +1,7 @@
 #![warn(clippy::all)]
 
-use rand::distributions::Standard;
+use rand::distributions::{DistIter, Standard};
+use rand::prelude::ThreadRng;
 use rand::{thread_rng, Rng};
 use sha1::{Digest, Sha1};
 use std::error::Error;
@@ -12,13 +13,13 @@ pub type Res<T> = Result<T, Box<dyn Error>>;
 
 const HEX_HASH_LEN: usize = 40;
 
-fn random_string(s: &mut Vec<u8>, len: usize, rng: &mut impl Iterator<Item = u8>) {
+fn random_string<const LEN: usize>(s: &mut Vec<u8>, rng: &mut DistIter<Standard, ThreadRng, u8>) {
     fn pred(&c: &u8) -> bool {
         c != b'\r' && c != b'\t' && c != b'\n' && c != b' '
     }
 
     s.clear();
-    s.extend(rng.filter(pred).take(len));
+    s.extend(rng.filter(pred).take(LEN));
 }
 
 fn hash(mut hasher: Sha1, suffix: &[u8], hash: &mut [u8; HEX_HASH_LEN]) -> Res<()> {
@@ -72,11 +73,11 @@ fn matches_difficulty<const N: usize>(hash: &[u8]) -> bool {
 }
 
 fn main() -> Res<()> {
-    let len: usize = 8;
+    const LEN: usize = 8;
     const ITERS: usize = 100_000_000;
 
     let diff = 7;
-    let diff_func_table = &[
+    const DIFF_FUNC_TABLE: &[fn(&[u8]) -> bool] = &[
         matches_difficulty::<0>,
         matches_difficulty::<1>,
         matches_difficulty::<2>,
@@ -88,7 +89,7 @@ fn main() -> Res<()> {
         matches_difficulty::<8>,
         matches_difficulty::<9>,
     ];
-    let matches_difficulty_func = diff_func_table[diff];
+    let matches_difficulty_func = DIFF_FUNC_TABLE[diff];
 
     let authdata = "kHtMDdVrTKHhUaNusVyBaJybfNMWjfxnaIiAYqgfmCTkNKFvYGloeHDHdsksfFla";
     let mut base_hasher = Sha1::default();
@@ -110,12 +111,12 @@ fn main() -> Res<()> {
 
             scope.spawn(move |_| {
                 let mut rng = thread_rng().sample_iter(Standard);
-                let mut suffix = Vec::with_capacity(len);
+                let mut suffix = Vec::with_capacity(LEN);
                 let mut hex_hash = [0u8; HEX_HASH_LEN];
 
                 let mut iters = 0;
                 for i in 0..ITERS {
-                    random_string(&mut suffix, len, &mut rng);
+                    random_string::<LEN>(&mut suffix, &mut rng);
                     // hash(base_hasher.clone(), &suffix, &mut hex_hash).unwrap();
 
                     let mut hasher = base_hasher.clone();
