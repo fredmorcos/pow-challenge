@@ -1,6 +1,6 @@
 #![warn(clippy::all)]
 
-use rand::distributions::{DistIter, Standard};
+use rand::distributions::{DistIter, Uniform};
 use rand::prelude::ThreadRng;
 use rand::{thread_rng, Rng};
 use sha1::{Digest, Sha1};
@@ -13,7 +13,10 @@ pub type Res<T> = Result<T, Box<dyn Error>>;
 
 const HEX_HASH_LEN: usize = 40;
 
-fn random_string<const LEN: usize>(s: &mut Vec<u8>, rng: &mut DistIter<Standard, ThreadRng, u8>) {
+fn random_string<const LEN: usize>(
+    s: &mut Vec<u8>,
+    rng: &mut DistIter<Uniform<u8>, ThreadRng, u8>,
+) {
     fn pred(&c: &u8) -> bool {
         c != b'\r' && c != b'\t' && c != b'\n' && c != b' '
     }
@@ -75,7 +78,7 @@ fn matches_difficulty<const N: usize>(hash: &[u8]) -> bool {
 fn main() -> Res<()> {
     const LEN: usize = 8;
 
-    let diff = 7;
+    let diff = 8;
     const DIFF_FUNC_TABLE: &[fn(&[u8]) -> bool] = &[
         matches_difficulty::<0>,
         matches_difficulty::<1>,
@@ -109,7 +112,7 @@ fn main() -> Res<()> {
             let result_suffix = result_suffix.clone();
 
             scope.spawn(move |_| {
-                let mut rng = thread_rng().sample_iter(Standard);
+                let mut rng = thread_rng().sample_iter(Uniform::from(1..255));
                 let mut suffix = Vec::with_capacity(LEN);
                 let mut hex_hash = [0u8; HEX_HASH_LEN];
 
