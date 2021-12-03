@@ -74,7 +74,6 @@ fn matches_difficulty<const N: usize>(hash: &[u8]) -> bool {
 
 fn main() -> Res<()> {
     const LEN: usize = 8;
-    const ITERS: usize = 100_000_000;
 
     let diff = 7;
     const DIFF_FUNC_TABLE: &[fn(&[u8]) -> bool] = &[
@@ -115,7 +114,9 @@ fn main() -> Res<()> {
                 let mut hex_hash = [0u8; HEX_HASH_LEN];
 
                 let mut iters = 0;
-                for i in 0..ITERS {
+                loop {
+                    iters += 1;
+
                     random_string::<LEN>(&mut suffix, &mut rng);
                     // hash(base_hasher.clone(), &suffix, &mut hex_hash).unwrap();
 
@@ -132,7 +133,6 @@ fn main() -> Res<()> {
                             } else {
                                 // Another thread is writing a result they've found, the
                                 // current thread can give up.
-                                iters = i;
                                 break;
                             };
 
@@ -162,19 +162,13 @@ fn main() -> Res<()> {
                             );
                         }
 
-                        iters = i;
                         break;
                     }
 
-                    if i % 10_000 == 0 && stop.load(std::sync::atomic::Ordering::Acquire) {
+                    if iters % 10_000 == 0 && stop.load(std::sync::atomic::Ordering::Acquire) {
                         println!("Thread {}: stopping", thread_i);
-                        iters = i;
                         break;
                     }
-                }
-
-                if iters == 0 {
-                    iters = ITERS;
                 }
 
                 total_iters.fetch_add(iters, std::sync::atomic::Ordering::Release);
