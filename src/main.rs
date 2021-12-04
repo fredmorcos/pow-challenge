@@ -1,8 +1,8 @@
 #![warn(clippy::all)]
 
 use rand::distributions::{DistIter, Uniform};
-use rand::prelude::ThreadRng;
-use rand::{thread_rng, Rng};
+use rand::{thread_rng, Rng, SeedableRng};
+use rand_xoshiro::Xoshiro128PlusPlus;
 use sha1::digest::consts::U20;
 use sha1::digest::generic_array::GenericArray;
 use sha1::digest::FixedOutput;
@@ -17,7 +17,7 @@ use std::time::Instant;
 pub type Res<T> = Result<T, Box<dyn Error>>;
 
 type Distribution = rand::distributions::Uniform<u8>;
-type BytesRng = DistIter<Distribution, ThreadRng, u8>;
+type BytesRng = DistIter<Distribution, Xoshiro128PlusPlus, u8>;
 
 fn random_string<const LEN: usize>(s: &mut Vec<u8>, rng: &mut BytesRng) {
   s.clear();
@@ -109,7 +109,9 @@ fn main() -> Res<()> {
       let result_suffix = result_suffix.clone();
 
       scope.spawn(move |_| {
-        let mut rng = thread_rng().sample_iter(Uniform::from(33..127));
+        let mut rng = Xoshiro128PlusPlus::from_rng(thread_rng())
+          .unwrap()
+          .sample_iter(Uniform::from(33..127));
         let mut suffix = Vec::with_capacity(LEN);
         let mut hashed = Default::default();
 
