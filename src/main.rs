@@ -13,10 +13,9 @@ pub type Res<T> = Result<T, Box<dyn Error>>;
 
 const HEX_HASH_LEN: usize = 40;
 
-fn random_string<const LEN: usize>(
-    s: &mut Vec<u8>,
-    rng: &mut DistIter<Uniform<u8>, ThreadRng, u8>,
-) {
+type BytesRng = DistIter<Uniform<u8>, ThreadRng, u8>;
+
+fn random_string<const LEN: usize>(s: &mut Vec<u8>, rng: &mut BytesRng) {
     fn pred(&c: &u8) -> bool {
         c != b'\r' && c != b'\t' && c != b'\n' && c != b' '
     }
@@ -95,7 +94,7 @@ fn main() -> Res<()> {
 
     let authdata = "kHtMDdVrTKHhUaNusVyBaJybfNMWjfxnaIiAYqgfmCTkNKFvYGloeHDHdsksfFla";
     let mut base_hasher = Sha1::default();
-    base_hasher.update(authdata);
+    base_hasher.update(authdata.as_bytes());
 
     let total_iters = Arc::new(AtomicUsize::new(0));
     let nthreads = rayon::current_num_threads();
