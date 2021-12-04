@@ -3,32 +3,30 @@
 use rand::distributions::{DistIter, Uniform};
 use rand::prelude::ThreadRng;
 use rand::{thread_rng, Rng};
+use sha1::digest::consts::U20;
+use sha1::digest::generic_array::GenericArray;
+use sha1::digest::FixedOutput;
 use sha1::{Digest, Sha1};
 use std::error::Error;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::Arc;
+#[cfg(feature = "timeit")]
+use std::time::Duration;
 use std::time::Instant;
 
 pub type Res<T> = Result<T, Box<dyn Error>>;
 
-const HEX_HASH_LEN: usize = 40;
-
-type BytesRng = DistIter<Uniform<u8>, ThreadRng, u8>;
+type Distribution = rand::distributions::Uniform<u8>;
+type BytesRng = DistIter<Distribution, ThreadRng, u8>;
 
 fn random_string<const LEN: usize>(s: &mut Vec<u8>, rng: &mut BytesRng) {
-    fn pred(&c: &u8) -> bool {
-        c != b'\r' && c != b'\t' && c != b'\n' && c != b' '
-    }
-
-    s.clear();
-    s.extend(rng.filter(pred).take(LEN));
+  s.clear();
+  s.extend(rng.take(LEN));
 }
 
-fn hash(mut hasher: Sha1, suffix: &[u8], hash: &mut [u8; HEX_HASH_LEN]) -> Res<()> {
-    hasher.update(suffix);
-    let hashed = &hasher.finalize()[..];
-    hex::encode_to_slice(hashed, hash)?;
-    Ok(())
+fn hash(mut hasher: Sha1, suffix: &[u8], hash: &mut GenericArray<u8, U20>) {
+  hasher.update(suffix);
+  hasher.finalize_into(hash);
 }
 
 #[rustfmt::skip]
@@ -75,128 +73,165 @@ fn matches_difficulty<const N: usize>(hash: &[u8]) -> bool {
 }
 
 fn main() -> Res<()> {
-    const LEN: usize = 8;
+  const LEN: usize = 8;
 
-    let diff = 8;
-    const DIFF_FUNC_TABLE: &[fn(&[u8]) -> bool] = &[
-        matches_difficulty::<0>,
-        matches_difficulty::<1>,
-        matches_difficulty::<2>,
-        matches_difficulty::<3>,
-        matches_difficulty::<4>,
-        matches_difficulty::<5>,
-        matches_difficulty::<6>,
-        matches_difficulty::<7>,
-        matches_difficulty::<8>,
-        matches_difficulty::<9>,
-    ];
-    let matches_difficulty_func = DIFF_FUNC_TABLE[diff];
+  let diff = 8;
+  const DIFF_FUNC_TABLE: &[fn(&[u8]) -> bool] = &[
+    matches_difficulty::<0>,
+    matches_difficulty::<1>,
+    matches_difficulty::<2>,
+    matches_difficulty::<3>,
+    matches_difficulty::<4>,
+    matches_difficulty::<5>,
+    matches_difficulty::<6>,
+    matches_difficulty::<7>,
+    matches_difficulty::<8>,
+    matches_difficulty::<9>,
+  ];
+  let matches_difficulty_func = DIFF_FUNC_TABLE[diff];
 
-    let authdata = "kHtMDdVrTKHhUaNusVyBaJybfNMWjfxnaIiAYqgfmCTkNKFvYGloeHDHdsksfFla";
-    let mut base_hasher = Sha1::default();
-    base_hasher.update(authdata.as_bytes());
+  let authdata = "kHtMDdVrTKHhUaNusVyBaJybfNMWjfxnaIiAYqgfmCTkNKFvYGloeHDHdsksfFla";
+  let mut base_hasher = Sha1::default();
+  base_hasher.update(authdata.as_bytes());
 
-    let total_iters = Arc::new(AtomicUsize::new(0));
-    let nthreads = rayon::current_num_threads();
+  let total_iters = Arc::new(AtomicUsize::new(0));
+  let nthreads = rayon::current_num_threads();
 
-    let stop = Arc::new(AtomicBool::new(false));
-    let result_suffix = Arc::new(parking_lot::const_mutex(None));
+  let stop = Arc::new(AtomicBool::new(false));
+  let result_suffix = Arc::new(parking_lot::const_mutex(None));
 
-    let start = Instant::now();
-    rayon::scope(|scope| {
-        for thread_i in 0..nthreads {
-            let base_hasher = &base_hasher;
-            let total_iters = total_iters.clone();
-            let stop = stop.clone();
-            let result_suffix = result_suffix.clone();
+  let start = Instant::now();
+  rayon::scope(|scope| {
+    for thread_i in 0..nthreads {
+      let base_hasher = &base_hasher;
+      let total_iters = total_iters.clone();
+      let stop = stop.clone();
+      let result_suffix = result_suffix.clone();
 
-            scope.spawn(move |_| {
-                let mut rng = thread_rng().sample_iter(Uniform::from(1..255));
-                let mut suffix = Vec::with_capacity(LEN);
-                let mut hex_hash = [0u8; HEX_HASH_LEN];
+      scope.spawn(move |_| {
+        let mut rng = thread_rng().sample_iter(Uniform::from(33..127));
+        let mut suffix = Vec::with_capacity(LEN);
+        let mut hashed = Default::default();
 
-                let mut iters = 0;
-                loop {
-                    iters += 1;
+        #[cfg(feature = "timeit")]
+        let mut time_gen = Duration::ZERO;
+        #[cfg(feature = "timeit")]
+        let mut time_hashing = Duration::ZERO;
+        #[cfg(feature = "timeit")]
+        let mut time_checking_match = Duration::ZERO;
+        #[cfg(feature = "timeit")]
+        let mut time_stop_checking = Duration::ZERO;
 
-                    random_string::<LEN>(&mut suffix, &mut rng);
-                    // hash(base_hasher.clone(), &suffix, &mut hex_hash).unwrap();
+        let mut iters = 0;
+        loop {
+          iters += 1;
 
-                    let mut hasher = base_hasher.clone();
-                    hasher.update(&suffix);
-                    let hashed = &hasher.finalize()[..];
+          #[cfg(feature = "timeit")]
+          let start = Instant::now();
+          random_string::<LEN>(&mut suffix, &mut rng);
+          #[cfg(feature = "timeit")]
+          {
+            time_gen += Instant::now().duration_since(start);
+          }
 
-                    if matches_difficulty_func(hashed) {
-                        stop.store(true, std::sync::atomic::Ordering::Release);
+          #[cfg(feature = "check")]
+          {
+            assert!(!suffix.contains(&b'\t'));
+            assert!(!suffix.contains(&b'\n'));
+            assert!(!suffix.contains(&b'\r'));
+            assert!(!suffix.contains(&b' '));
+          }
 
-                        let mut result_suffix =
-                            if let Some(result_suffix) = result_suffix.try_lock() {
-                                result_suffix
-                            } else {
-                                // Another thread is writing a result they've found, the
-                                // current thread can give up.
-                                break;
-                            };
+          #[cfg(feature = "timeit")]
+          let start = Instant::now();
+          hash(base_hasher.clone(), &suffix, &mut hashed);
+          #[cfg(feature = "timeit")]
+          {
+            time_hashing += Instant::now().duration_since(start);
+          }
 
-                        *result_suffix = Some(suffix);
+          #[cfg(feature = "timeit")]
+          let start = Instant::now();
+          let matches = matches_difficulty_func(&hashed);
+          #[cfg(feature = "timeit")]
+          {
+            time_checking_match += Instant::now().duration_since(start);
+          }
 
-                        println!(
-                            "Thread {}: Found string ({}) {:?}",
-                            thread_i,
-                            hashed.len(),
-                            hashed
-                        );
+          if matches {
+            stop.store(true, std::sync::atomic::Ordering::Release);
 
-                        if let Err(e) = hex::encode_to_slice(hashed, &mut hex_hash) {
-                            println!("Thread {}: Failed to encode hash to hex: {}", thread_i, e);
-                        } else if let Ok(hex_hash) = std::str::from_utf8(&hex_hash) {
-                            println!(
-                                "Thread {}: Found string with \
-                                      authentication hash `{}` \
-                                      that matches difficulty {}",
-                                thread_i, hex_hash, diff
-                            );
-                        } else {
-                            println!(
-                                "Thread {}: Found string that \
-                                      matches difficulty {}",
-                                thread_i, diff
-                            );
-                        }
+            let mut result_suffix = if let Some(result_suffix) = result_suffix.try_lock() {
+              result_suffix
+            } else {
+              // Another thread is writing a result they've found, the
+              // current thread can give up.
+              break;
+            };
 
-                        break;
-                    }
+            *result_suffix = Some(suffix);
 
-                    if iters % 10_000 == 0 && stop.load(std::sync::atomic::Ordering::Acquire) {
-                        println!("Thread {}: stopping", thread_i);
-                        break;
-                    }
-                }
+            println!("Thread {}: Found string ({}) {:?}", thread_i, hashed.len(), hashed);
 
-                total_iters.fetch_add(iters, std::sync::atomic::Ordering::Release);
-            })
+            println!(
+              "Thread {}: Found string with authentication hash `{}` that matches difficulty {}",
+              thread_i,
+              hex::encode(hashed),
+              diff
+            );
+
+            break;
+          }
+
+          #[cfg(feature = "timeit")]
+          let start = Instant::now();
+          let should_stop = iters % 10_000 == 0 && stop.load(std::sync::atomic::Ordering::Acquire);
+          #[cfg(feature = "timeit")]
+          {
+            time_stop_checking += Instant::now().duration_since(start);
+          }
+
+          if should_stop {
+            println!("Thread {}: stopping", thread_i);
+            break;
+          }
         }
-    });
-    let duration = Instant::now().duration_since(start);
 
-    if let Some(result_suffix) = &*result_suffix.lock() {
-        let mut hex_hash = [0u8; HEX_HASH_LEN];
-        hash(base_hasher, result_suffix, &mut hex_hash).unwrap();
-        if let Ok(hex_hash) = std::str::from_utf8(&hex_hash) {
-            println!("Result = {}", hex_hash);
+        #[cfg(feature = "timeit")]
+        {
+          println!(
+            "Thread {}: Gen({})  Hash({})  MatchCheck({})  StopCheck({})",
+            thread_i,
+            humantime::format_duration(time_gen),
+            humantime::format_duration(time_hashing),
+            humantime::format_duration(time_checking_match),
+            humantime::format_duration(time_stop_checking),
+          );
         }
-    } else {
-        println!("NO RESULT FOUND");
+
+        total_iters.fetch_add(iters, std::sync::atomic::Ordering::Release);
+      })
     }
-    let total_iters = total_iters.load(std::sync::atomic::Ordering::SeqCst);
-    let iters_per_micro = f64::from(total_iters as u32) / f64::from(duration.as_micros() as u32);
-    let iters_per_sec = iters_per_micro * 1_000_000.0;
-    println!(
-        "{}: {} iterations: {} iterations/s",
-        humantime::format_duration(duration),
-        total_iters,
-        iters_per_sec
-    );
+  });
+  let duration = Instant::now().duration_since(start);
 
-    Ok(())
+  if let Some(result_suffix) = &*result_suffix.lock() {
+    let mut hashed = Default::default();
+    hash(base_hasher, result_suffix, &mut hashed);
+    println!("Result = {}", hex::encode(hashed));
+  } else {
+    println!("NO RESULT FOUND");
+  }
+
+  let total_iters = total_iters.load(std::sync::atomic::Ordering::SeqCst);
+  let iters_per_micro = f64::from(total_iters as u32) / f64::from(duration.as_micros() as u32);
+  let iters_per_sec = iters_per_micro * 1_000_000.0;
+  println!(
+    "{}: {} iterations: {} iterations/s",
+    humantime::format_duration(duration),
+    total_iters,
+    iters_per_sec
+  );
+
+  Ok(())
 }
