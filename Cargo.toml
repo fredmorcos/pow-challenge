@@ -1,5 +1,5 @@
 [package]
-name = "gen_rand_str"
+name = "parallel_pow"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,7 +9,6 @@ edition = "2021"
 stats = []
 
 [dependencies]
-crossbeam = "0.8"
 hex = "0.4"
 humantime = "2.1"
 parking_lot = "0.11"
