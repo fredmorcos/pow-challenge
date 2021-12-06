@@ -1,0 +1,4 @@
+Dependencies are licensed separately. For a list of dependencies see the file Cargo.toml
+provided with the source distribution. For information about each dependency, such as
+authorship and licensing information, please see each dependency's page on
+https://crates.io.

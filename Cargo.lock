@@ -195,19 +195,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
-name = "parallel_pow"
-version = "0.1.0"
-dependencies = [
- "hex",
- "humantime",
- "parking_lot",
- "rand",
- "rand_xoshiro",
- "rayon",
- "sha-1",
-]
-
-[[package]]
 name = "parking_lot"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -230,6 +217,19 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "winapi",
+]
+
+[[package]]
+name = "pow-challenge"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "humantime",
+ "parking_lot",
+ "rand",
+ "rand_xoshiro",
+ "rayon",
+ "sha-1",
 ]
 
 [[package]]

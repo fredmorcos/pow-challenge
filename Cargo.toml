@@ -1,9 +1,15 @@
 [package]
-name = "parallel_pow"
+name = "pow-challenge"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "Exasol coding challenge"
+authors = ["Fred Morcos <fm@fredmorcos.com>"]
+license = "GPL-3.0-only"
+homepage = "https://github.com/fredmorcos/pow-challenge"
+repository = "https://github.com/fredmorcos/pow-challenge"
+readme = "README.md"
+keywords = ["exasol", "pow", "challenge", "hash", "random-string"]
+categories = ["authentication", "command-line-utilities", "cryptography", "cryptography::cryptocurrencies", "network-programming"]
 
 [features]
 stats = []
